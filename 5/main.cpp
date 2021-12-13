@@ -6,10 +6,7 @@
 #include <tuple>
 #include <memory>
 #include <cstring>
-
-// Grid size
-static constexpr size_t N_ROWS = 1000UL;
-static constexpr size_t N_COLS = 1000UL;
+#include <map>
 
 typedef struct ThermalLine {
 
@@ -41,6 +38,11 @@ std::ostream& operator<<(std::ostream& os, const ThermalLine &t) {
   return os;
 }
 
+std::ostream& operator<<(std::ostream& os, const std::tuple<size_t, size_t> &t) {
+  os << "(" << std::get<0>(t) << "," << std::get<1>(t) << ")" << std::endl;
+  return os;
+}
+
 // I LOVE parsing strings in C++ I CANNOT get ENOUGH of this
 std::unique_ptr<ThermalLine> create_thermal_from_str(const std::string &str) {
   size_t x1, y1, x2, y2;
@@ -63,16 +65,54 @@ std::unique_ptr<ThermalLine> create_thermal_from_str(const std::string &str) {
   return std::make_unique<ThermalLine>(x1, y1, x2, y2);
 }
 
-size_t find_danger_zones(size_t grid[N_ROWS][N_COLS], size_t threshold) {
-  size_t danger_zone_cnt = 0;
-  for (size_t i = 0; i < N_ROWS; i++) {
-    for (size_t j = 0; j < N_COLS; j++) {
-      if (grid[i][j] >= threshold) {
-        danger_zone_cnt++;
-      }
-    }
+void find_points_in_line(std::list<std::tuple<size_t, size_t>>& list, const std::unique_ptr<ThermalLine>& tline) {
+  list.clear();
+
+  // line of length 1...?
+  if (tline->first() == tline->second()) {
+    list.push_back(tline->first());
+    return;
   }
-  return danger_zone_cnt;
+
+  size_t lowerx = tline->x1() < tline->x2() ? tline->x1() : tline->x2();
+  size_t upperx = tline->x1() > tline->x2() ? tline->x1() : tline->x2();
+  size_t lowery = tline->y1() < tline->y2() ? tline->y1() : tline->y2();
+  size_t uppery = tline->y1() > tline->y2() ? tline->y1() : tline->y2();
+
+  if (tline->y1() == tline->y2()) { // horizontal
+    for (; lowerx <= upperx; lowerx++) {
+      // lowery and uppery the same here.. just pick one
+      list.push_back(std::make_tuple(lowerx, lowery));
+    }
+  } else if (tline->x1() == tline->x2()) { // vertical
+    for (; lowery <= uppery; lowery++) {
+      // lowerx and upperx the same here.. just pick one
+      list.push_back(std::make_tuple(lowerx, lowery));
+    }
+  } else { // diagonal
+    // positive or negative slope? (positive == truthy)
+    bool slope = (tline->y1() < tline->y2()) ? true : false;
+    // now go left to right
+    std::tuple<size_t, size_t> current = 
+      lowerx == tline->x1() ? tline->first() : tline->second();
+    std::tuple<size_t, size_t> end = 
+      lowerx == tline->x1() ? tline->second() : tline->first();
+
+    std::cout << "current " << current << std::endl;
+    std::cout << "end " << end << std::endl;
+
+    while (current != end) {
+      list.push_back(current);
+      std::get<0>(current)++;
+      if (slope) {
+        std::get<1>(current)++;
+      } else {
+        std::get<1>(current)--;
+      }
+      std::cout << "now " << current <<std::endl;
+    }
+    list.push_back(end);
+  }
 }
 
 int main() {
@@ -85,70 +125,31 @@ int main() {
     thermal_lines.push_back(std::move(create_thermal_from_str(input_line)));
   }
 
-  // create ocean grid
-  size_t ocean_floor[N_ROWS][N_COLS];
-  for (size_t i = 0; i < N_ROWS; i++) {
-    std::memset(ocean_floor[i], 0, sizeof(size_t) * N_COLS);
-  }
-
-  std::cout << "Number of overlapping zones: " << find_danger_zones(ocean_floor, 1) << std::endl;
+  // frequency mapping
+  std::map<std::tuple<size_t, size_t>, size_t> map;
+  // points contained in a line
+  std::list<std::tuple<size_t, size_t>> point_list;
 
   // connect the lines...
-  // wow this is a monster and I'm sure there's a better way to handle this
   for (const std::unique_ptr<ThermalLine> &t : thermal_lines) {
-    // accounting for this edge case makes our indexing easier later on (can assume some iteration is needed)
-    if (t->first() == t->second()) {
-      // row major access is kind of weird but ok
-      ocean_floor[t->y1()][t->x1()]++;
-    } else if (t->x1() == t->x2()) {
-      const size_t xidx = t->x1();
-      // we know these aren't equal but have no idea if they're ordered
-      // use int to make for-loop convenient
-      int yidx = t->y1();
-      if (yidx < static_cast<int>(t->y2())) {
-        for (; yidx <= static_cast<int>(t->y2()); yidx++) {
-          ocean_floor[yidx][xidx]++;
-        }
+    find_points_in_line(point_list, t);
+    for (auto p : point_list) {
+      if (map.find(p) != map.end()) {
+        map[p]++;
       } else {
-        for (; yidx >= static_cast<int>(t->y2()); yidx--) {
-          ocean_floor[yidx][xidx]++;
-        }
+        map.insert({p, 0});
       }
-    } else if (t->y1() == t->y2()) {
-      const size_t yidx = t->y1();
-      // we know these aren't equal but have no idea if they're ordered
-      // use int to make for-loop convenient
-      int xidx = t->x1();
-      if (xidx < static_cast<int>(t->x2())) {
-        for (; xidx <= static_cast<int>(t->x2()); xidx++) {
-          ocean_floor[yidx][xidx]++;
-        }
-      } else {
-        for (; xidx >= static_cast<int>(t->x2()); xidx--) {
-          ocean_floor[yidx][xidx]++;
-        }
-      }
-    } else { // handle diagonal case
-      int xidx = t->x1();
-      int yidx = t->y1();
-      while (xidx != static_cast<int>(t->x2()) and yidx != static_cast<int>(t->y2())) {
-        ocean_floor[yidx][xidx]++;
-        if (xidx < static_cast<int>(t->x2())) {
-          xidx++;
-        } else {
-          xidx--;
-        }
-        if (yidx < static_cast<int>(t->y2())) {
-          yidx++;
-        } else {
-          yidx--;
-        }
-      }
-      ocean_floor[yidx][xidx]++;
     }
   }
 
-  std::cout << "Number of overlapping zones: " << find_danger_zones(ocean_floor, 2) << std::endl;
+  size_t danger_zones = 0;
+  for (auto const& p : map) {
+    if (p.second >= 2) {
+      danger_zones++;
+    }
+  }
+
+  std::cout << "Dangers zones: " << danger_zones << std::endl;
 
   return 0;
 }
