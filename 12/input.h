@@ -28,3 +28,14 @@ std::list<std::tuple<std::string, std::string>> g_input =
 {"end", "wy"},
 {"qc", "nr"},
 {"end", "nr"}};
+
+
+std::list<std::tuple<std::string, std::string>> g_input2 = 
+{{"ln", "nr"},
+{"start", "A"},
+{"start", "b"},
+{"A", "c"},
+{"A", "b"},
+{"b", "d"},
+{"A", "end"},
+{"b", "end"}};
